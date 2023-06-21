@@ -1,0 +1,123 @@
+library(RSelenium)
+library(tidyverse)
+library(netstat)
+library(googlesheets4)
+library(httr)
+
+
+followers <- remDr$findElements(using = 'xpath', '//a[@class="left-content--5Sb8S left-content--bYMRG"]')
+followers_unlisted <- lapply(followers, function(x) x$getElementAttribute('href')) %>% unlist()
+
+href <- sapply(followers, function(elements){
+  elements$getElementAttribute("href") %>% unlist()
+})
+
+
+getbio3 <- function(link){
+  remDr$navigate(as.character(link))
+  Sys.sleep(4)
+  username <- remDr$findElements(using = 'xpath', '//h2[@data-e2e="user-title"]')
+  bio <- remDr$findElements(using = 'xpath', '//h2[@data-e2e="user-bio"]')
+  Sys.sleep(3)
+  followers <- remDr$findElements(using = 'xpath', '//strong[@data-e2e="followers-count"]')
+  Sys.sleep(4)
+  followers <- lapply(followers, function(x) x$getElementText()) %>% unlist()
+  Sys.sleep(3)
+  views <- remDr$findElements(using = 'xpath', '//strong[@data-e2e="video-views"]')
+  Sys.sleep(4)
+  views_unlisted <- lapply(views, function(x) x$getElementText()) %>% unlist()
+  Sys.sleep(4)
+  views_unlisted <-  views_unlisted %>% 
+    str_replace_all(., '[K]', '00') %>% str_replace_all(., '[M]', '00000') %>% 
+    str_replace_all(.,  '[.]', "") %>% as.numeric()
+  Sys.sleep(2)
+  latestviews <- views_unlisted[1:6]
+  Sys.sleep(1)
+  medianviews <- median(latestviews)
+  bio <- lapply(bio, function(x) x$getElementText()) %>% unlist()
+  bio <- gsub('[\r\n]', ' ', bio)
+  username <- lapply(username, function(x) x$getElementText()) %>% unlist()
+  Sys.sleep(1)
+  dffun <- data.frame(bio, username, medianviews, followers)
+  
+}
+
+
+
+## loop
+
+n = 160
+datalist2 = list()
+# or pre-allocate for slightly more efficiency
+datalist = vector("list", length = n)
+
+for (i in 1:5) {
+  # ... make some data
+  dat <- getbio3(href[i])
+  # maybe you want to keep track of which iteration produced it?
+  datalist2[[i]] <- dat # add it to your list
+}
+
+for (i in 1:100) {
+  # Use tryCatch() to handle potential errors
+  dat <- tryCatch({
+    getbio3(href[i])
+  }, error = function(e) {
+    # In case of an error, return NA
+    NA
+  })
+  
+  # Add the result (dat) to the list
+  datalist2[[i]] <- dat 
+}
+
+
+
+big_data3 = do.call(rbind, datalist2)
+
+write_csv(big_data3,"D:\\rworkspaces\\Tiktok\\tiktokproject\\creators100.csv")
+# or big_data <- dplyr::bind_rows(datalist)
+# or big_data <- data.table::rbindlist(datalist)
+
+
+
+## function just to get views
+getviews <- function(link){
+  remDr$navigate(as.character(link))
+views <- remDr$findElements(using = 'xpath', '//strong[@data-e2e="video-views"]')
+Sys.sleep(4)
+views_unlisted <- lapply(views, function(x) x$getElementText())
+Sys.sleep(8)
+views_unlisted <- views_unlisted  %>% unlist()
+Sys.sleep(8)
+views_unlisted <-  views_unlisted %>% 
+  str_replace_all(., '[K]', '00') %>% str_replace_all(., '[M]', '00000') %>% 
+  str_replace_all(.,  '[.]', "") %>% as.numeric()
+Sys.sleep(2)
+latestviews <- views_unlisted[1:6]
+Sys.sleep(1)
+medianviews <- median(latestviews)
+Sys.sleep(1)
+dffun <- data.frame(link, medianviews)
+}
+
+## loop
+
+n = 160
+datalist3 = list()
+
+for (i in 1:5) {
+  # Use tryCatch() to handle potential errors
+  dat <- tryCatch({
+    getviews(href[i])
+  }, error = function(e) {
+    # In case of an error, return NA
+    NA
+  })
+  
+  # Add the result (dat) to the list
+  datalist3[[i]] <- dat 
+}
+big_data4 = do.call(rbind, datalist3)
+
+gsheet <- gs4_create("creatorslist", sheets = big_data3)
